@@ -635,7 +635,7 @@ export async function print(transport, rasterData, options = {}) {
     await printTSPL(transport, data, widthBytes, heightLines, labelWidthMm, labelHeightMm, density, onProgress);
   } else if (isP12 && isBLE) {
     // P12 uses its own protocol with proprietary init sequence
-    await printP12(transport, data, widthBytes, heightLines, onProgress);
+    await printP12(transport, data, widthBytes, heightLines, feed, onProgress);
   } else if (isDSeries && isBLE) {
     // D-series (D30, D110, etc.)
     await printDSeries(transport, data, widthBytes, heightLines, onProgress, density, continuous, feed);
@@ -726,7 +726,7 @@ async function printDSeries(transport, data, widthBytes, heightLines, onProgress
  * Print via BLE for P12-series printers (P12, P12 Pro)
  * Continuous tape printer - uses proprietary init sequence to fix print positioning
  */
-async function printP12(transport, data, widthBytes, heightLines, onProgress) {
+async function printP12(transport, data, widthBytes, heightLines, feed, onProgress) {
   console.log('Using P12-series protocol...');
   console.log(`Input: ${widthBytes} bytes wide x ${heightLines} rows (${data.length} bytes)`);
 
@@ -767,12 +767,18 @@ async function printP12(transport, data, widthBytes, heightLines, onProgress) {
     }
   }
 
-  // P12 feed command (ESC d 13, twice as per soburi protocol)
-  await transport.delay(100);
-  console.log('Sending P12 feed...');
-  await transport.send(P12_CMD.FEED);
-  await transport.delay(50);
-  await transport.send(P12_CMD.FEED);
+  // The previous fixed feed sent two ESC d 13 commands. Treat that as the
+  // medium setting and scale the number of commands for the other settings.
+  // The actual distance per command depends on the printer's line spacing.
+  const feedCommands = Math.max(0, Math.round(feed / 16));
+  if (feedCommands > 0) {
+    await transport.delay(100);
+    console.log(`Sending ${feedCommands} P12 feed command(s)...`);
+    for (let i = 0; i < feedCommands; i++) {
+      await transport.send(P12_CMD.FEED);
+      if (i < feedCommands - 1) await transport.delay(50);
+    }
+  }
 
   console.log('Print complete!');
 }
