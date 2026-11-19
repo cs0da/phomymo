@@ -1636,6 +1636,19 @@ export class CanvasRenderer {
         } else {
           currentLine = testLine;
         }
+
+        if (metrics.width > maxWidth && this.ctx.measureText(currentLine).width > maxWidth) {
+          currentLine = '';
+          for (const character of word) {
+            const chunk = currentLine + character;
+            if (currentLine && this.ctx.measureText(chunk).width > maxWidth) {
+              lines.push(currentLine);
+              currentLine = character;
+            } else {
+              currentLine = chunk;
+            }
+          }
+        }
       }
 
       if (currentLine) {
